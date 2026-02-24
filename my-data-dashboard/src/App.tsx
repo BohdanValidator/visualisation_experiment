@@ -878,9 +878,11 @@ export default function App() {
                     <Bar
                       dataKey="v"
                       radius={[4, 4, 0, 0]}
-                      onClick={(d: { name: string }) =>
-                        handleBrandClick(d.name)
-                      }
+                      onClick={(d: { name?: string }) => {
+                        if (d && d.name) {
+                          handleBrandClick(d.name);
+                        }
+                      }}
                       style={{ cursor: "pointer" }}
                     >
                       {[...brands]
