@@ -583,7 +583,7 @@ export default function App() {
                 textTransform: "uppercase",
               }}
             >
-              AdIntel Creative Analytics
+              Validators Creative Analytics
             </span>
           </div>
           <span
