@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import type { ReactNode, CSSProperties } from "react";
 import {
   BarChart,
   Bar,
@@ -13,41 +12,8 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
+  Legend,
 } from "recharts";
-import type { TooltipProps } from "recharts";
-import type {
-  NameType,
-  ValueType,
-} from "recharts/types/component/DefaultTooltipContent";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface Row {
-  [key: string]: string;
-}
-
-interface CepStat {
-  label: string;
-  count: number;
-  pct: number;
-}
-
-interface Feature {
-  name: string;
-  val: number;
-  color: string;
-}
-
-interface Brand {
-  name: string;
-  creatives: Row[];
-  totalSpend: number;
-  ceps: CepStat[];
-  objectives: Record<string, number>;
-  valences: Record<string, number>;
-  features: Feature[];
-  activeCeps: number;
-  color: string;
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CEP_LABELS = [
@@ -95,22 +61,29 @@ const CEP_COLORS = [
   "#c084fc",
 ];
 
+const MEDIUM_COLORS = {
+  Televisie: "#3b82f6",
+  Radio: "#f59e0b",
+  "Social Media": "#ec4899",
+  "Online display": "#10b981",
+  Dagbladen: "#8b5cf6",
+  Magazines: "#06b6d4",
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const BOOL = (v: string): boolean => v === "True" || v === "TRUE";
-const NUM = (v: string): number => parseFloat(v.replace(/[^\d.]/g, "")) || 0;
-const fmt = (n: number): string =>
+const BOOL = (v) => v === "True" || v === "TRUE";
+const NUM = (v) => parseFloat(String(v).replace(/[^\d.]/g, "")) || 0;
+const fmt = (n) =>
   n >= 1e6
     ? `€${(n / 1e6).toFixed(1)}M`
     : n >= 1e3
       ? `€${(n / 1e3).toFixed(0)}K`
       : `€${Math.round(n)}`;
-const pct = (a: number, b: number): number =>
-  b === 0 ? 0 : Math.round((a / b) * 100);
+const pct = (a, b) => (b === 0 ? 0 : Math.round((a / b) * 100));
+const cepKey = (i) => `CEP_${String(i + 1).padStart(2, "0")}`;
 
-const cepKey = (i: number) => `CEP_${String(i + 1).padStart(2, "0")}`;
-
-const buildBrands = (rows: Row[]): Brand[] => {
-  const map: Record<string, Row[]> = {};
+const buildBrands = (rows) => {
+  const map = {};
   rows.forEach((r) => {
     const m = r["Merk"] || "Unknown";
     if (!map[m]) map[m] = [];
@@ -119,41 +92,56 @@ const buildBrands = (rows: Row[]): Brand[] => {
 
   return Object.entries(map)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, creatives], idx): Brand => {
+    .map(([name, creatives], idx) => {
       const totalSpend = creatives.reduce(
         (s, r) => s + NUM(r["Spend"] ?? "0"),
         0,
       );
 
-      const ceps: CepStat[] = CEP_LABELS.map((label, i) => {
+      const ceps = CEP_LABELS.map((label, i) => {
         const count = creatives.filter((r) => BOOL(r[cepKey(i)] ?? "")).length;
-        return { label, count, pct: pct(count, creatives.length) };
+        const spend = creatives
+          .filter((r) => BOOL(r[cepKey(i)] ?? ""))
+          .reduce((s, r) => s + NUM(r["Spend"] ?? "0"), 0);
+        return { label, count, pct: pct(count, creatives.length), spend };
       });
 
-      const objectives: Record<string, number> = {};
+      const objectives = {};
       creatives.forEach((r) => {
         const o = r["Objective"] ?? "?";
         objectives[o] = (objectives[o] ?? 0) + 1;
       });
 
-      const valences: Record<string, number> = {};
+      const valences = {};
       creatives.forEach((r) => {
         const v = r["Valence"] ?? "?";
         valences[v] = (valences[v] ?? 0) + 1;
       });
 
-      const fl = (key: string) =>
+      const mediumSpend = {};
+      creatives.forEach((r) => {
+        const m = r["Mediumtype"] ?? "?";
+        mediumSpend[m] = (mediumSpend[m] ?? 0) + NUM(r["Spend"] ?? "0");
+      });
+
+      const imago = {};
+      creatives.forEach((r) => {
+        const im = r["Imago"] ?? "?";
+        imago[im] = (imago[im] ?? 0) + 1;
+      });
+
+      const fl = (key) =>
         pct(
           creatives.filter((r) => BOOL(r[key] ?? "")).length,
           creatives.length,
         );
-      const fv = (key: string) =>
+      const fv = (key) =>
         pct(
           creatives.filter((r) => r[key] && r[key] !== "Afwezig").length,
           creatives.length,
         );
 
-      const features: Feature[] = [
+      const features = [
         { name: "Humor", val: fl("Humor"), color: "#f59e0b" },
         {
           name: "Bekende Persoon",
@@ -164,6 +152,8 @@ const buildBrands = (rows: Row[]): Brand[] => {
         { name: "Soundlogo", val: fl("DBA - Soundlogo"), color: "#06b6d4" },
         { name: "Muziek", val: fv("Music Type"), color: "#10b981" },
         { name: "DBA Slogan", val: fl("DBA - Slogan"), color: "#f97316" },
+        { name: "Karakter", val: fl("DBA - Karakter"), color: "#ec4899" },
+        { name: "Mystery Ad", val: fl("Mystery Ad"), color: "#14b8a6" },
       ];
 
       return {
@@ -173,22 +163,20 @@ const buildBrands = (rows: Row[]): Brand[] => {
         ceps,
         objectives,
         valences,
+        mediumSpend,
+        imago,
         features,
         activeCeps: ceps.filter((c) => c.count > 0).length,
         color: PALETTE[idx % PALETTE.length],
+        avgSpend: totalSpend / creatives.length,
+        spendEfficiency:
+          totalSpend / Math.max(1, ceps.filter((c) => c.count > 0).length),
       };
     });
 };
 
 // ─── Micro UI ─────────────────────────────────────────────────────────────────
-const Tip = ({
-  active,
-  payload,
-  label,
-}: TooltipProps<ValueType, NameType> & {
-  payload?: any[];
-  label?: string;
-}) => {
+const Tip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
     <div
@@ -197,33 +185,37 @@ const Tip = ({
         border: "1px solid #475569",
         borderRadius: 6,
         padding: "10px 14px",
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', monospace",
         fontSize: 12,
         color: "#e2e8f0",
         boxShadow: "0 8px 24px rgba(0,0,0,.6)",
+        zIndex: 100,
       }}
     >
       <div style={{ color: "#64748b", marginBottom: 4, fontSize: 11 }}>
         {String(label)}
       </div>
       {payload.map((p, i) => (
-        <div key={i} style={{ color: (p.fill ?? p.color ?? "#fff") as string }}>
+        <div key={i} style={{ color: p.fill ?? p.color ?? "#fff" }}>
+          {p.name && (
+            <span style={{ color: "#475569", marginRight: 6 }}>{p.name}:</span>
+          )}
           {typeof p.value === "number" && p.value > 10000
             ? fmt(p.value)
             : String(p.value)}
+          {typeof p.value === "number" &&
+          p.value <= 100 &&
+          p.value > 0 &&
+          p.unit !== "€"
+            ? "%"
+            : ""}
         </div>
       ))}
     </div>
   );
 };
 
-const Card = ({
-  children,
-  style,
-}: {
-  children: ReactNode;
-  style?: CSSProperties;
-}) => (
+const Card = ({ children, style }) => (
   <div
     style={{
       background: "#1e293b",
@@ -237,10 +229,10 @@ const Card = ({
   </div>
 );
 
-const SectionLabel = ({ children }: { children: ReactNode }) => (
+const SectionLabel = ({ children }) => (
   <div
     style={{
-      fontFamily: "monospace",
+      fontFamily: "'JetBrains Mono', monospace",
       fontSize: 10,
       letterSpacing: "0.2em",
       color: "#475569",
@@ -265,17 +257,7 @@ const SectionLabel = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
-const KpiCard = ({
-  label,
-  value,
-  color,
-  sub,
-}: {
-  label: string;
-  value: string | number;
-  color: string;
-  sub?: string;
-}) => (
+const KpiCard = ({ label, value, color, sub }) => (
   <div
     style={{
       background: "#0f172a",
@@ -287,7 +269,7 @@ const KpiCard = ({
   >
     <div
       style={{
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', monospace",
         fontSize: 9,
         color: "#475569",
         letterSpacing: "0.22em",
@@ -314,7 +296,7 @@ const KpiCard = ({
           fontSize: 10,
           color: "#475569",
           marginTop: 6,
-          fontFamily: "monospace",
+          fontFamily: "'JetBrains Mono', monospace",
         }}
       >
         {sub}
@@ -323,7 +305,7 @@ const KpiCard = ({
   </div>
 );
 
-const FBar = ({ name, val, color }: Feature) => (
+const FBar = ({ name, val, color }) => (
   <div
     style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}
   >
@@ -334,7 +316,7 @@ const FBar = ({ name, val, color }: Feature) => (
         color: "#94a3b8",
         textAlign: "right",
         flexShrink: 0,
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', monospace",
       }}
     >
       {name}
@@ -362,7 +344,7 @@ const FBar = ({ name, val, color }: Feature) => (
       style={{
         width: 38,
         fontSize: 11,
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', monospace",
         fontWeight: 700,
         color: "#e2e8f0",
       }}
@@ -372,17 +354,7 @@ const FBar = ({ name, val, color }: Feature) => (
   </div>
 );
 
-const CepTag = ({
-  label,
-  active,
-  color,
-  idx,
-}: {
-  label: string;
-  active: boolean;
-  color: string;
-  idx: number;
-}) => (
+const CepTag = ({ label, active, color, idx }) => (
   <div
     style={{
       display: "flex",
@@ -391,7 +363,7 @@ const CepTag = ({
       padding: "8px 12px",
       borderRadius: 6,
       fontSize: 11,
-      fontFamily: "monospace",
+      fontFamily: "'JetBrains Mono', monospace",
       background: active ? `${color}18` : "#0f172a",
       border: `1px solid ${active ? color + "55" : "#1e293b"}`,
       color: active ? "#e2e8f0" : "#334155",
@@ -423,12 +395,11 @@ const CepTag = ({
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [brandName, setBrandName] = useState<string | null>(null);
+  const [error, setError] = useState(null);
+  const [brandName, setBrandName] = useState(null);
   const [tab, setTab] = useState("overview");
-  const [selCreative, setSelCreative] = useState(0);
 
   useEffect(() => {
     fetch("/data.json")
@@ -436,37 +407,114 @@ export default function App() {
         if (!r.ok) throw new Error(String(r.status));
         return r.json();
       })
-      .then((data: Row[]) => {
+      .then((data) => {
         setRows(data);
         setLoading(false);
       })
-      .catch((e: Error) => {
+      .catch((e) => {
         setError(e.message);
         setLoading(false);
       });
   }, []);
 
-  const brands = useMemo<Brand[]>(
-    () => (rows.length ? buildBrands(rows) : []),
-    [rows],
-  );
+  const brands = useMemo(() => (rows.length ? buildBrands(rows) : []), [rows]);
 
   useEffect(() => {
     if (brands.length > 0 && brandName === null) setBrandName(brands[0].name);
   }, [brands, brandName]);
 
-  const handleBrandClick = (name: string) => {
+  const handleBrandClick = (name) => {
     setBrandName(name);
-    setSelCreative(0);
     setTab("overview");
   };
 
-  const brand = useMemo<Brand | null>(
+  const brand = useMemo(
     () => brands.find((b) => b.name === brandName) ?? brands[0] ?? null,
     [brands, brandName],
   );
 
-  const TABS = ["overview", "cep", "creatives", "detail"];
+  const TABS = ["overview", "cep"];
+
+  // Cross-brand comparison data
+  const crossBrandCepSpend = useMemo(() => {
+    return CEP_LABELS.map((label, i) => {
+      const entry = {
+        name: label.length > 12 ? label.substring(0, 12) + "…" : label,
+        fullName: label,
+      };
+      brands.forEach((b) => {
+        entry[b.name] = b.ceps[i].spend;
+      });
+      return entry;
+    });
+  }, [brands]);
+
+  const crossBrandFeatures = useMemo(() => {
+    const featureNames = [
+      "Humor",
+      "Bekende Persoon",
+      "Voice-over",
+      "Soundlogo",
+      "Muziek",
+      "DBA Slogan",
+      "Karakter",
+      "Mystery Ad",
+    ];
+    return featureNames.map((fname) => {
+      const entry = { name: fname };
+      brands.forEach((b) => {
+        const f = b.features.find((ft) => ft.name === fname);
+        entry[b.name] = f ? f.val : 0;
+      });
+      return entry;
+    });
+  }, [brands]);
+
+  const marketTotals = useMemo(() => {
+    const totalSpend = brands.reduce((s, b) => s + b.totalSpend, 0);
+    const totalCreatives = brands.reduce((s, b) => s + b.creatives.length, 0);
+    const avgCeps =
+      brands.length > 0
+        ? (
+            brands.reduce((s, b) => s + b.activeCeps, 0) / brands.length
+          ).toFixed(1)
+        : 0;
+    return { totalSpend, totalCreatives, avgCeps };
+  }, [brands]);
+
+  const mediumData = useMemo(() => {
+    const mediums = [
+      "Televisie",
+      "Radio",
+      "Social Media",
+      "Online display",
+      "Dagbladen",
+      "Magazines",
+    ];
+    return brands
+      .filter((b) => b.totalSpend > 100000)
+      .sort((a, b) => b.totalSpend - a.totalSpend)
+      .map((b) => {
+        const entry = { name: b.name, color: b.color };
+        mediums.forEach((m) => {
+          entry[m] = b.mediumSpend[m] || 0;
+        });
+        return entry;
+      });
+  }, [brands]);
+
+  const spendVsCepData = useMemo(() => {
+    return brands
+      .filter((b) => b.totalSpend > 100000)
+      .map((b) => ({
+        name: b.name,
+        spend: b.totalSpend,
+        ceps: b.activeCeps,
+        creatives: b.creatives.length,
+        color: b.color,
+        avgSpend: b.avgSpend,
+      }));
+  }, [brands]);
 
   if (loading)
     return (
@@ -483,7 +531,7 @@ export default function App() {
         <div
           style={{
             color: "#475569",
-            fontFamily: "monospace",
+            fontFamily: "'JetBrains Mono', monospace",
             fontSize: 13,
             letterSpacing: "0.3em",
           }}
@@ -508,7 +556,11 @@ export default function App() {
         }}
       >
         <div
-          style={{ color: "#ef4444", fontFamily: "monospace", fontSize: 14 }}
+          style={{
+            color: "#ef4444",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 14,
+          }}
         >
           {error ? `Error: ${error}` : "No data — place data.json in /public"}
         </div>
@@ -527,24 +579,25 @@ export default function App() {
       }}
     >
       <style>{`
-        html, body, #root { margin:0; padding:0; width:100%; min-height:100vh; background:#0f172a; }
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+        html, body, #root { margin:0; padding:0; width:100%; min-height:100vh; background:#0f172a; font-family:'Space Grotesk',system-ui,sans-serif; }
         *, *::before, *::after { box-sizing:border-box; }
         ::-webkit-scrollbar { width:6px; height:6px; background:#0f172a; }
         ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
-        .brand-btn { font-family:system-ui,sans-serif; font-size:13px; font-weight:700;
+        .brand-btn { font-family:'Space Grotesk',system-ui,sans-serif; font-size:13px; font-weight:700;
           cursor:pointer; border-radius:8px; padding:10px 20px; white-space:nowrap;
           transition:transform .12s ease, box-shadow .12s ease; }
-        .brand-btn:hover { filter:brightness(1.1); }
-        .tab-btn { background:none; font-family:monospace; font-size:11px;
+        .brand-btn:hover { filter:brightness(1.15); transform:translateY(-1px); }
+        .tab-btn { background:none; font-family:'JetBrains Mono',monospace; font-size:11px;
           letter-spacing:0.15em; text-transform:uppercase; padding:14px 22px;
           cursor:pointer; transition:color .15s; border:none; }
-        .c-card { border-radius:10px; padding:18px; cursor:pointer;
-          transition:filter .12s; }
-        .c-card:hover { filter:brightness(1.08); }
-        .trow { cursor:pointer; }
+        .tab-btn:hover { color:#94a3b8 !important; }
+        .trow { cursor:pointer; transition:background .1s; }
         .trow:hover td { background:#1e3a5f !important; }
         @keyframes fin { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
         .fin { animation:fin .22s ease both; }
+        .heatcell { transition: transform .1s; }
+        .heatcell:hover { transform: scale(1.15); z-index:2; }
       `}</style>
 
       {/* ══ HEADER ══ */}
@@ -576,28 +629,32 @@ export default function App() {
             />
             <span
               style={{
-                fontFamily: "monospace",
+                fontFamily: "'JetBrains Mono', monospace",
                 fontSize: 12,
                 letterSpacing: "0.22em",
                 color: "#475569",
                 textTransform: "uppercase",
               }}
             >
-              Validators Creative Analytics
+              Validators | be in the know
             </span>
           </div>
           <span
-            style={{ fontFamily: "monospace", fontSize: 10, color: "#334155" }}
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10,
+              color: "#334155",
+            }}
           >
-            {rows.length.toLocaleString()} creatives · {brands.length} brands
+            {rows.length.toLocaleString()} creatives · {brands.length} brands ·{" "}
+            {fmt(marketTotals.totalSpend)} total market
           </span>
         </div>
 
-        {/* Brand selector */}
         <div>
           <div
             style={{
-              fontFamily: "monospace",
+              fontFamily: "'JetBrains Mono', monospace",
               fontSize: 9,
               color: "#475569",
               letterSpacing: "0.22em",
@@ -632,7 +689,7 @@ export default function App() {
                       marginLeft: 6,
                       fontSize: 10,
                       opacity: 0.6,
-                      fontFamily: "monospace",
+                      fontFamily: "'JetBrains Mono', monospace",
                       fontWeight: 400,
                     }}
                   >
@@ -677,7 +734,7 @@ export default function App() {
         {brand && (
           <div
             style={{
-              fontFamily: "monospace",
+              fontFamily: "'JetBrains Mono', monospace",
               fontSize: 11,
               color: "#475569",
               display: "flex",
@@ -714,10 +771,11 @@ export default function App() {
           {/* ── OVERVIEW ── */}
           {tab === "overview" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {/* KPI Row */}
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(4,1fr)",
+                  gridTemplateColumns: "repeat(5,1fr)",
                   gap: 14,
                 }}
               >
@@ -729,7 +787,7 @@ export default function App() {
                 />
                 <KpiCard
                   label="Avg Spend / Creative"
-                  value={fmt(brand.totalSpend / brand.creatives.length)}
+                  value={fmt(brand.avgSpend)}
                   color="#f59e0b"
                 />
                 <KpiCard
@@ -738,17 +796,20 @@ export default function App() {
                   color="#10b981"
                 />
                 <KpiCard
-                  label="Market Rank (spend)"
-                  value={`#${
-                    [...brands]
-                      .sort((a, b) => b.totalSpend - a.totalSpend)
-                      .findIndex((b) => b.name === brand.name) + 1
-                  }`}
+                  label="Market Rank"
+                  value={`#${[...brands].sort((a, b) => b.totalSpend - a.totalSpend).findIndex((b) => b.name === brand.name) + 1}`}
                   color="#8b5cf6"
                   sub={`of ${brands.length} brands`}
                 />
+                <KpiCard
+                  label="Market Share"
+                  value={`${pct(brand.totalSpend, marketTotals.totalSpend)}%`}
+                  color="#ec4899"
+                  sub={fmt(marketTotals.totalSpend) + " total"}
+                />
               </div>
 
+              {/* Brand-level: Features + Objectives/Valence */}
               <div
                 style={{
                   display: "grid",
@@ -757,7 +818,9 @@ export default function App() {
                 }}
               >
                 <Card>
-                  <SectionLabel>Creative Feature Usage</SectionLabel>
+                  <SectionLabel>
+                    Creative Feature Usage — {brand.name}
+                  </SectionLabel>
                   {brand.features.map((f) => (
                     <FBar key={f.name} {...f} />
                   ))}
@@ -768,7 +831,7 @@ export default function App() {
                   <Card>
                     <SectionLabel>Objective Split</SectionLabel>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {(Object.entries(brand.objectives) as [string, number][])
+                      {Object.entries(brand.objectives)
                         .sort((a, b) => b[1] - a[1])
                         .map(([k, v], i) => (
                           <div
@@ -795,7 +858,7 @@ export default function App() {
                               style={{
                                 fontSize: 10,
                                 color: "#64748b",
-                                fontFamily: "monospace",
+                                fontFamily: "'JetBrains Mono', monospace",
                                 marginTop: 3,
                               }}
                             >
@@ -808,7 +871,7 @@ export default function App() {
                   <Card>
                     <SectionLabel>Valence Split</SectionLabel>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {(Object.entries(brand.valences) as [string, number][])
+                      {Object.entries(brand.valences)
                         .sort((a, b) => b[1] - a[1])
                         .map(([k, v], i) => (
                           <div
@@ -835,7 +898,7 @@ export default function App() {
                               style={{
                                 fontSize: 10,
                                 color: "#64748b",
-                                fontFamily: "monospace",
+                                fontFamily: "'JetBrains Mono', monospace",
                                 marginTop: 3,
                               }}
                             >
@@ -845,14 +908,116 @@ export default function App() {
                         ))}
                     </div>
                   </Card>
+                  <Card>
+                    <SectionLabel>Brand Image (Imago)</SectionLabel>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {Object.entries(brand.imago)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([k, v], i) => {
+                          const total = brand.creatives.length;
+                          const p = pct(v, total);
+                          const colors = [
+                            "#3b82f6",
+                            "#f59e0b",
+                            "#10b981",
+                            "#ef4444",
+                            "#8b5cf6",
+                            "#06b6d4",
+                            "#f97316",
+                            "#ec4899",
+                          ];
+                          const c = colors[i % colors.length];
+                          return (
+                            <div
+                              key={k}
+                              style={{
+                                flex: "1 1 80px",
+                                background: "#0f172a",
+                                borderRadius: 8,
+                                padding: "10px 14px",
+                                border: `1px solid ${c}33`,
+                                position: "relative",
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  bottom: 0,
+                                  left: 0,
+                                  width: `${p}%`,
+                                  height: 3,
+                                  background: c,
+                                  borderRadius: "0 2px 0 0",
+                                }}
+                              />
+                              <div
+                                style={{
+                                  fontSize: 20,
+                                  fontWeight: 900,
+                                  color: c,
+                                }}
+                              >
+                                {p}%
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 9,
+                                  color: "#64748b",
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  marginTop: 2,
+                                }}
+                              >
+                                {k}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </Card>
                 </div>
               </div>
 
+              {/* ═══ CROSS-BRAND SECTION ═══ */}
+              <div style={{ marginTop: 8, marginBottom: 4 }}>
+                <div
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    letterSpacing: "0.3em",
+                    color: "#3b82f6",
+                    textTransform: "uppercase",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 40,
+                      height: 1,
+                      background:
+                        "linear-gradient(90deg, transparent, #3b82f6)",
+                    }}
+                  />
+                  Cross-Brand Analysis
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background:
+                        "linear-gradient(90deg, #3b82f6, transparent)",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Total Spend Bar Chart */}
               <Card>
                 <SectionLabel>
                   All Brands — Total Spend (click to switch)
                 </SectionLabel>
-                <ResponsiveContainer width="100%" height={180}>
+                <ResponsiveContainer width="100%" height={200}>
                   <BarChart
                     data={[...brands]
                       .sort((a, b) => b.totalSpend - a.totalSpend)
@@ -868,7 +1033,7 @@ export default function App() {
                       tick={{
                         fontSize: 10,
                         fill: "#64748b",
-                        fontFamily: "monospace",
+                        fontFamily: "'JetBrains Mono', monospace",
                       }}
                       axisLine={false}
                       tickLine={false}
@@ -878,10 +1043,8 @@ export default function App() {
                     <Bar
                       dataKey="v"
                       radius={[4, 4, 0, 0]}
-                      onClick={(d: { name?: string }) => {
-                        if (d && d.name) {
-                          handleBrandClick(d.name);
-                        }
+                      onClick={(d) => {
+                        if (d?.name) handleBrandClick(d.name);
                       }}
                       style={{ cursor: "pointer" }}
                     >
@@ -899,12 +1062,415 @@ export default function App() {
                   </BarChart>
                 </ResponsiveContainer>
               </Card>
-            </div>
-          )}
 
-          {/* ── CEP ── */}
-          {tab === "cep" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {/* Media Mix Comparison */}
+              <Card>
+                <SectionLabel>
+                  Media Mix by Brand (spend distribution)
+                </SectionLabel>
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.max(240, mediumData.length * 32 + 60)}
+                >
+                  <BarChart
+                    data={mediumData}
+                    layout="vertical"
+                    margin={{ left: 110, right: 20, top: 10, bottom: 10 }}
+                    stackOffset="expand"
+                    barSize={20}
+                  >
+                    <XAxis
+                      type="number"
+                      tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                      tick={{
+                        fontSize: 10,
+                        fill: "#475569",
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={105}
+                      tick={({ x, y, payload }) => {
+                        const b = brands.find(
+                          (br) => br.name === payload.value,
+                        );
+                        return (
+                          <text
+                            x={x}
+                            y={y}
+                            dy={4}
+                            textAnchor="end"
+                            style={{
+                              fontSize: 10,
+                              fill: b?.color || "#94a3b8",
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontWeight:
+                                payload.value === brandName ? 800 : 400,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => handleBrandClick(payload.value)}
+                          >
+                            {payload.value}
+                          </text>
+                        );
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        return (
+                          <div
+                            style={{
+                              background: "#1e293b",
+                              border: "1px solid #475569",
+                              borderRadius: 6,
+                              padding: "10px 14px",
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: 11,
+                              color: "#e2e8f0",
+                              boxShadow: "0 8px 24px rgba(0,0,0,.6)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                color: "#64748b",
+                                marginBottom: 6,
+                                fontSize: 10,
+                              }}
+                            >
+                              {label}
+                            </div>
+                            {payload
+                              .filter((p) => p.value > 0)
+                              .map((p, i) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    color: p.fill,
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 16,
+                                  }}
+                                >
+                                  <span>{p.name}</span>
+                                  <span style={{ fontWeight: 700 }}>
+                                    {fmt(p.value)}
+                                  </span>
+                                </div>
+                              ))}
+                          </div>
+                        );
+                      }}
+                    />
+                    {Object.entries(MEDIUM_COLORS).map(([m, c]) => (
+                      <Bar key={m} dataKey={m} stackId="a" fill={c} />
+                    ))}
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: 10,
+                        color: "#64748b",
+                        paddingTop: 8,
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+
+              {/* CEP Spend Heatmap */}
+              <Card>
+                <SectionLabel>
+                  CEP × Brand Spend Heatmap (€ allocated to creatives per CEP)
+                </SectionLabel>
+                <div style={{ overflowX: "auto" }}>
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "separate",
+                      borderSpacing: 3,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 10,
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th
+                          style={{
+                            textAlign: "left",
+                            padding: "6px 10px",
+                            color: "#334155",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Brand
+                        </th>
+                        {CEP_LABELS.map((l, i) => (
+                          <th
+                            key={i}
+                            title={l}
+                            style={{
+                              padding: "6px 4px",
+                              color: CEP_COLORS[i],
+                              fontWeight: 600,
+                              fontSize: 8,
+                              textAlign: "center",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {l.length > 8 ? l.substring(0, 8) + "…" : l}
+                          </th>
+                        ))}
+                        <th
+                          style={{
+                            padding: "6px 10px",
+                            color: "#f59e0b",
+                            fontWeight: 600,
+                            textAlign: "right",
+                          }}
+                        >
+                          Total
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...brands]
+                        .filter((b) => b.totalSpend > 100000)
+                        .sort((a, b) => b.totalSpend - a.totalSpend)
+                        .map((b) => {
+                          const isActive = b.name === brandName;
+                          const maxCepSpend = Math.max(
+                            ...brands.flatMap((br) =>
+                              br.ceps.map((c) => c.spend),
+                            ),
+                            1,
+                          );
+                          return (
+                            <tr
+                              key={b.name}
+                              className="trow"
+                              onClick={() => handleBrandClick(b.name)}
+                            >
+                              <td
+                                style={{
+                                  padding: "6px 10px",
+                                  fontWeight: 700,
+                                  color: b.color,
+                                  background: isActive
+                                    ? "#162032"
+                                    : "transparent",
+                                  borderRadius: "4px 0 0 4px",
+                                }}
+                              >
+                                {b.name}
+                              </td>
+                              {b.ceps.map((c, ci) => {
+                                const intensity = c.spend / maxCepSpend;
+                                const alpha = Math.max(
+                                  0.05,
+                                  Math.min(0.9, intensity),
+                                );
+                                return (
+                                  <td
+                                    key={ci}
+                                    className="heatcell"
+                                    title={`${b.name} · ${c.label}: ${fmt(c.spend)}`}
+                                    style={{
+                                      padding: "6px 4px",
+                                      textAlign: "center",
+                                      background:
+                                        c.spend > 0
+                                          ? `${CEP_COLORS[ci]}${Math.round(
+                                              alpha * 255,
+                                            )
+                                              .toString(16)
+                                              .padStart(2, "0")}`
+                                          : "#0d1117",
+                                      borderRadius: 3,
+                                      color:
+                                        c.spend > 0 ? "#e2e8f0" : "#1e293b",
+                                      fontSize: 9,
+                                      fontWeight: 600,
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    {c.spend >= 1e6
+                                      ? `${(c.spend / 1e6).toFixed(1)}M`
+                                      : c.spend >= 1e3
+                                        ? `${(c.spend / 1e3).toFixed(0)}K`
+                                        : c.spend > 0
+                                          ? "•"
+                                          : ""}
+                                  </td>
+                                );
+                              })}
+                              <td
+                                style={{
+                                  padding: "6px 10px",
+                                  textAlign: "right",
+                                  fontWeight: 700,
+                                  color: "#f59e0b",
+                                  background: isActive
+                                    ? "#162032"
+                                    : "transparent",
+                                  borderRadius: "0 4px 4px 0",
+                                }}
+                              >
+                                {fmt(b.totalSpend)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Cross-brand Feature Comparison */}
+              <Card>
+                <SectionLabel>
+                  Creative Features — All Brands (% of creatives)
+                </SectionLabel>
+                <div style={{ overflowX: "auto" }}>
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "separate",
+                      borderSpacing: 3,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 10,
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th
+                          style={{
+                            textAlign: "left",
+                            padding: "6px 10px",
+                            color: "#334155",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Brand
+                        </th>
+                        {[
+                          "Humor",
+                          "Bekende Persoon",
+                          "Voice-over",
+                          "Soundlogo",
+                          "Muziek",
+                          "DBA Slogan",
+                          "Karakter",
+                          "Mystery Ad",
+                        ].map((f, i) => {
+                          const colors = [
+                            "#f59e0b",
+                            "#ef4444",
+                            "#8b5cf6",
+                            "#06b6d4",
+                            "#10b981",
+                            "#f97316",
+                            "#ec4899",
+                            "#14b8a6",
+                          ];
+                          return (
+                            <th
+                              key={f}
+                              style={{
+                                padding: "6px 4px",
+                                color: colors[i],
+                                fontWeight: 600,
+                                fontSize: 8,
+                                textAlign: "center",
+                              }}
+                            >
+                              {f}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...brands]
+                        .filter((b) => b.totalSpend > 100000)
+                        .sort((a, b) => b.totalSpend - a.totalSpend)
+                        .map((b) => {
+                          const isActive = b.name === brandName;
+                          const featureColors = [
+                            "#f59e0b",
+                            "#ef4444",
+                            "#8b5cf6",
+                            "#06b6d4",
+                            "#10b981",
+                            "#f97316",
+                            "#ec4899",
+                            "#14b8a6",
+                          ];
+                          return (
+                            <tr
+                              key={b.name}
+                              className="trow"
+                              onClick={() => handleBrandClick(b.name)}
+                            >
+                              <td
+                                style={{
+                                  padding: "6px 10px",
+                                  fontWeight: 700,
+                                  color: b.color,
+                                  background: isActive
+                                    ? "#162032"
+                                    : "transparent",
+                                  borderRadius: "4px 0 0 4px",
+                                }}
+                              >
+                                {b.name}
+                              </td>
+                              {b.features.map((f, fi) => {
+                                const alpha = Math.max(
+                                  0.05,
+                                  (f.val / 100) * 0.85,
+                                );
+                                return (
+                                  <td
+                                    key={fi}
+                                    className="heatcell"
+                                    style={{
+                                      padding: "6px 4px",
+                                      textAlign: "center",
+                                      background:
+                                        f.val > 0
+                                          ? `${featureColors[fi]}${Math.round(
+                                              alpha * 255,
+                                            )
+                                              .toString(16)
+                                              .padStart(2, "0")}`
+                                          : "#0d1117",
+                                      borderRadius: 3,
+                                      color: f.val > 0 ? "#e2e8f0" : "#1e293b",
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {f.val > 0 ? `${f.val}%` : ""}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Spend vs CEP Breadth + Avg Spend */}
               <div
                 style={{
                   display: "grid",
@@ -913,116 +1479,224 @@ export default function App() {
                 }}
               >
                 <Card>
-                  <SectionLabel>CEP Radar — {brand.name}</SectionLabel>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <RadarChart
-                      data={brand.ceps.map((c) => ({
-                        subject:
-                          c.label.length > 10
-                            ? c.label.substring(0, 10) + "…"
-                            : c.label,
-                        pct: c.pct,
-                      }))}
+                  <SectionLabel>Spend vs CEP Breadth</SectionLabel>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart
+                      data={[...spendVsCepData].sort(
+                        (a, b) => b.spend - a.spend,
+                      )}
+                      margin={{ top: 10, right: 20, left: 10, bottom: 30 }}
                     >
-                      <PolarGrid stroke="#1e293b" />
-                      <PolarAngleAxis
-                        dataKey="subject"
+                      <XAxis
+                        dataKey="name"
                         tick={{
                           fontSize: 9,
                           fill: "#64748b",
-                          fontFamily: "monospace",
-                        }}
-                      />
-                      <PolarRadiusAxis
-                        angle={90}
-                        domain={[0, 100]}
-                        tick={{ fontSize: 8, fill: "#334155" }}
-                        axisLine={false}
-                      />
-                      <Radar
-                        dataKey="pct"
-                        stroke={brand.color}
-                        fill={brand.color}
-                        fillOpacity={0.2}
-                        dot={{ fill: brand.color, r: 4 }}
-                      />
-                      <Tooltip content={<Tip />} formatter={(v) => `${v}%`} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </Card>
-                <Card>
-                  <SectionLabel>CEP Frequency (# of creatives)</SectionLabel>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart
-                      data={brand.ceps}
-                      layout="vertical"
-                      margin={{ left: 100, right: 20 }}
-                    >
-                      <XAxis
-                        type="number"
-                        domain={[0, brand.creatives.length]}
-                        tick={{
-                          fontSize: 10,
-                          fill: "#475569",
-                          fontFamily: "monospace",
+                          fontFamily: "'JetBrains Mono', monospace",
                         }}
                         axisLine={false}
                         tickLine={false}
+                        angle={-35}
+                        textAnchor="end"
+                        height={50}
                       />
                       <YAxis
-                        type="category"
-                        dataKey="label"
-                        width={95}
-                        tick={{
-                          fontSize: 9,
-                          fill: "#94a3b8",
-                          fontFamily: "monospace",
-                        }}
+                        yAxisId="spend"
+                        orientation="left"
+                        tick={{ fontSize: 9, fill: "#475569" }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => fmt(v)}
+                      />
+                      <YAxis
+                        yAxisId="ceps"
+                        orientation="right"
+                        domain={[0, 11]}
+                        tick={{ fontSize: 9, fill: "#10b981" }}
                         axisLine={false}
                         tickLine={false}
                       />
-                      <Tooltip content={<Tip />} />
-                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                        {brand.ceps.map((_, i) => (
-                          <Cell key={i} fill={CEP_COLORS[i]} />
-                        ))}
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          return (
+                            <div
+                              style={{
+                                background: "#1e293b",
+                                border: "1px solid #475569",
+                                borderRadius: 6,
+                                padding: "10px 14px",
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: 11,
+                                color: "#e2e8f0",
+                              }}
+                            >
+                              <div
+                                style={{ color: "#64748b", marginBottom: 4 }}
+                              >
+                                {label}
+                              </div>
+                              {payload.map((p, i) => (
+                                <div
+                                  key={i}
+                                  style={{ color: p.fill || p.color }}
+                                >
+                                  {p.name === "v"
+                                    ? `Spend: ${fmt(p.value)}`
+                                    : `CEPs: ${p.value}/11`}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar
+                        yAxisId="spend"
+                        dataKey="spend"
+                        name="v"
+                        radius={[4, 4, 0, 0]}
+                        barSize={24}
+                      >
+                        {[...spendVsCepData]
+                          .sort((a, b) => b.spend - a.spend)
+                          .map((d, i) => (
+                            <Cell
+                              key={i}
+                              fill={
+                                d.name === brandName ? d.color : `${d.color}44`
+                              }
+                            />
+                          ))}
+                      </Bar>
+                      <Bar
+                        yAxisId="ceps"
+                        dataKey="ceps"
+                        fill="#10b98144"
+                        radius={[4, 4, 0, 0]}
+                        barSize={10}
+                      >
+                        {[...spendVsCepData]
+                          .sort((a, b) => b.spend - a.spend)
+                          .map((d, i) => (
+                            <Cell
+                              key={i}
+                              fill={
+                                d.name === brandName ? "#10b981" : "#10b98144"
+                              }
+                            />
+                          ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 16,
+                      justifyContent: "center",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 9,
+                      color: "#475569",
+                      marginTop: 4,
+                    }}
+                  >
+                    <span>■ Bars = Spend</span>
+                    <span style={{ color: "#10b981" }}>
+                      ■ Narrow bars = Active CEPs
+                    </span>
+                  </div>
+                </Card>
+
+                <Card>
+                  <SectionLabel>Average Spend per Creative</SectionLabel>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart
+                      data={[...spendVsCepData].sort(
+                        (a, b) => b.avgSpend - a.avgSpend,
+                      )}
+                      margin={{ top: 10, right: 20, left: 10, bottom: 30 }}
+                    >
+                      <XAxis
+                        dataKey="name"
+                        tick={{
+                          fontSize: 9,
+                          fill: "#64748b",
+                          fontFamily: "'JetBrains Mono', monospace",
+                        }}
+                        axisLine={false}
+                        tickLine={false}
+                        angle={-35}
+                        textAnchor="end"
+                        height={50}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 9, fill: "#475569" }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => fmt(v)}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          return (
+                            <div
+                              style={{
+                                background: "#1e293b",
+                                border: "1px solid #475569",
+                                borderRadius: 6,
+                                padding: "10px 14px",
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: 11,
+                                color: "#e2e8f0",
+                              }}
+                            >
+                              <div
+                                style={{ color: "#64748b", marginBottom: 4 }}
+                              >
+                                {label}
+                              </div>
+                              <div style={{ color: "#f59e0b" }}>
+                                Avg: {fmt(payload[0].value)}
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar
+                        dataKey="avgSpend"
+                        radius={[4, 4, 0, 0]}
+                        barSize={28}
+                      >
+                        {[...spendVsCepData]
+                          .sort((a, b) => b.avgSpend - a.avgSpend)
+                          .map((d, i) => (
+                            <Cell
+                              key={i}
+                              fill={
+                                d.name === brandName ? "#f59e0b" : "#f59e0b33"
+                              }
+                              stroke={
+                                d.name === brandName ? "#f59e0b" : "#f59e0b44"
+                              }
+                              strokeWidth={1}
+                            />
+                          ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </Card>
               </div>
 
-              <Card>
-                <SectionLabel>CEP Presence — {brand.name}</SectionLabel>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(4,1fr)",
-                    gap: 10,
-                  }}
-                >
-                  {brand.ceps.map((c, i) => (
-                    <CepTag
-                      key={i}
-                      label={c.label}
-                      active={c.count > 0}
-                      color={CEP_COLORS[i]}
-                      idx={i}
-                    />
-                  ))}
-                </div>
-              </Card>
-
+              {/* CEP Matrix (dot-style from original CEP tab) */}
               <Card>
                 <SectionLabel>
-                  Cross-Brand CEP Matrix (click row to switch)
+                  Cross-Brand CEP Presence Matrix (click row to switch)
                 </SectionLabel>
                 <div style={{ overflowX: "auto" }}>
                   <table
                     style={{
                       width: "100%",
                       borderCollapse: "collapse",
-                      fontFamily: "monospace",
+                      fontFamily: "'JetBrains Mono', monospace",
                       fontSize: 11,
                     }}
                   >
@@ -1065,602 +1739,409 @@ export default function App() {
                         >
                           Score
                         </th>
+                        <th
+                          style={{
+                            padding: "8px 12px",
+                            color: "#334155",
+                            fontWeight: 600,
+                            borderBottom: "1px solid #1e293b",
+                            textAlign: "right",
+                          }}
+                        >
+                          Spend
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {brands.map((b, ri) => {
-                        const isActive = b.name === brandName;
-                        const bg = isActive ? "#162032" : "transparent";
-                        return (
-                          <tr
-                            key={ri}
-                            className="trow"
-                            onClick={() => handleBrandClick(b.name)}
-                          >
-                            <td
-                              style={{
-                                padding: "9px 12px",
-                                borderBottom: "1px solid #0f172a",
-                                fontWeight: 700,
-                                color: b.color,
-                                background: bg,
-                              }}
+                      {[...brands]
+                        .sort((a, b) => b.totalSpend - a.totalSpend)
+                        .map((b, ri) => {
+                          const isActive = b.name === brandName;
+                          const bg = isActive ? "#162032" : "transparent";
+                          return (
+                            <tr
+                              key={ri}
+                              className="trow"
+                              onClick={() => handleBrandClick(b.name)}
                             >
-                              {b.name}
-                            </td>
-                            {b.ceps.map((c, ci) => (
                               <td
-                                key={ci}
                                 style={{
-                                  padding: "9px 6px",
-                                  textAlign: "center",
+                                  padding: "9px 12px",
                                   borderBottom: "1px solid #0f172a",
+                                  fontWeight: 700,
+                                  color: b.color,
                                   background: bg,
                                 }}
                               >
-                                <div
-                                  style={{
-                                    width: 10,
-                                    height: 10,
-                                    borderRadius: "50%",
-                                    margin: "0 auto",
-                                    background:
-                                      c.count > 0 ? CEP_COLORS[ci] : "#1e293b",
-                                    boxShadow:
-                                      c.count > 0
-                                        ? `0 0 5px ${CEP_COLORS[ci]}`
-                                        : "none",
-                                  }}
-                                />
+                                {b.name}
                               </td>
-                            ))}
-                            <td
-                              style={{
-                                padding: "9px 12px",
-                                borderBottom: "1px solid #0f172a",
-                                fontWeight: 700,
-                                color: "#f59e0b",
-                                background: bg,
-                              }}
-                            >
-                              {b.activeCeps}/11
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              {b.ceps.map((c, ci) => (
+                                <td
+                                  key={ci}
+                                  style={{
+                                    padding: "9px 6px",
+                                    textAlign: "center",
+                                    borderBottom: "1px solid #0f172a",
+                                    background: bg,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: 10,
+                                      height: 10,
+                                      borderRadius: "50%",
+                                      margin: "0 auto",
+                                      background:
+                                        c.count > 0
+                                          ? CEP_COLORS[ci]
+                                          : "#1e293b",
+                                      boxShadow:
+                                        c.count > 0
+                                          ? `0 0 5px ${CEP_COLORS[ci]}`
+                                          : "none",
+                                    }}
+                                  />
+                                </td>
+                              ))}
+                              <td
+                                style={{
+                                  padding: "9px 12px",
+                                  borderBottom: "1px solid #0f172a",
+                                  fontWeight: 700,
+                                  color: "#10b981",
+                                  background: bg,
+                                }}
+                              >
+                                {b.activeCeps}/11
+                              </td>
+                              <td
+                                style={{
+                                  padding: "9px 12px",
+                                  borderBottom: "1px solid #0f172a",
+                                  fontWeight: 700,
+                                  color: "#f59e0b",
+                                  background: bg,
+                                  textAlign: "right",
+                                }}
+                              >
+                                {fmt(b.totalSpend)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
+                </div>
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                  }}
+                >
+                  {CEP_LABELS.map((l, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        fontSize: 9,
+                        fontFamily: "'JetBrains Mono', monospace",
+                        color: CEP_COLORS[i],
+                        opacity: 0.7,
+                      }}
+                    >
+                      C{i + 1}={l}
+                    </span>
+                  ))}
                 </div>
               </Card>
             </div>
           )}
 
-          {/* ── CREATIVES ── */}
-          {tab === "creatives" && (
-            <div>
-              <div
-                style={{
-                  fontFamily: "monospace",
-                  fontSize: 10,
-                  color: "#475569",
-                  marginBottom: 16,
-                  letterSpacing: "0.1em",
-                }}
-              >
-                {brand.creatives.length} creatives for {brand.name} — click to
-                view detail
-              </div>
+          {/* ── CEP ── */}
+          {tab === "cep" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))",
-                  gap: 14,
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 16,
                 }}
               >
-                {brand.creatives.map((r, i) => {
-                  const spend = NUM(r["Spend"] ?? "0");
-                  const cepCount = CEP_LABELS.filter((_, ci) =>
-                    BOOL(r[cepKey(ci)] ?? ""),
-                  ).length;
-                  const isActive = selCreative === i;
-                  return (
-                    <div
-                      key={i}
-                      className="c-card"
-                      onClick={() => {
-                        setSelCreative(i);
-                        setTab("detail");
-                      }}
-                      style={{
-                        background: isActive ? "#1e3a5f" : "#1e293b",
-                        border: `1px solid ${isActive ? brand.color : "#334155"}`,
-                        boxShadow: isActive
-                          ? `0 0 20px ${brand.color}44`
-                          : "none",
-                      }}
+                <Card>
+                  <SectionLabel>CEP Radar — {brand.name}</SectionLabel>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RadarChart
+                      data={brand.ceps.map((c) => ({
+                        subject:
+                          c.label.length > 10
+                            ? c.label.substring(0, 10) + "…"
+                            : c.label,
+                        pct: c.pct,
+                      }))}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          marginBottom: 10,
-                        }}
-                      >
-                        <div>
-                          <div
-                            style={{
-                              fontFamily: "monospace",
-                              fontSize: 10,
-                              color: brand.color,
-                              marginBottom: 3,
-                            }}
-                          >
-                            {r["Campaign Code"]}
-                          </div>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>
-                            {r["Objective"]}
-                          </div>
-                          <div style={{ fontSize: 11, color: "#64748b" }}>
-                            {r["Valence"]}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right" }}>
-                          <div
-                            style={{
-                              fontSize: 18,
-                              fontWeight: 900,
-                              color: "#f59e0b",
-                            }}
-                          >
-                            {fmt(spend)}
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: "monospace",
-                              fontSize: 10,
-                              color: "#475569",
-                            }}
-                          >
-                            {cepCount} CEPs
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 3, marginBottom: 8 }}>
-                        {CEP_LABELS.map((lbl, ci) => {
-                          const on = BOOL(r[cepKey(ci)] ?? "");
-                          return (
-                            <div
-                              key={ci}
-                              title={lbl}
-                              style={{
-                                width: 19,
-                                height: 19,
-                                borderRadius: 4,
-                                fontSize: 8,
-                                background: on ? CEP_COLORS[ci] : "#0f172a",
-                                border: `1px solid ${on ? CEP_COLORS[ci] + "88" : "#1e293b"}`,
-                                color: on ? "#fff" : "#334155",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontFamily: "monospace",
-                                fontWeight: 700,
-                              }}
-                            >
-                              {ci + 1}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div
-                        style={{ display: "flex", gap: 5, flexWrap: "wrap" }}
-                      >
-                        {(
-                          [
-                            ["Humor", "#f59e0b"],
-                            ["Bekende Personen", "#ef4444"],
-                            ["DBA - Soundlogo", "#06b6d4"],
-                            ["DBA - Slogan", "#10b981"],
-                          ] as [string, string][]
-                        )
-                          .filter(([key]) => BOOL(r[key] ?? ""))
-                          .map(([key, color]) => (
-                            <span
-                              key={key}
-                              style={{
-                                fontSize: 9,
-                                fontFamily: "monospace",
-                                padding: "2px 7px",
-                                borderRadius: 4,
-                                background: `${color}22`,
-                                color,
-                                border: `1px solid ${color}44`,
-                              }}
-                            >
-                              {key.replace("DBA - ", "")}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── DETAIL ── */}
-          {tab === "detail" &&
-            (() => {
-              const r = brand.creatives[selCreative] as Row | undefined;
-              if (!r)
-                return (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: 80,
-                      color: "#334155",
-                      fontFamily: "monospace",
-                      fontSize: 13,
-                    }}
-                  >
-                    GO TO CREATIVES TAB AND SELECT A CREATIVE
-                  </div>
-                );
-              return (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 20 }}
-                >
-                  {/* Hero */}
-                  <div
-                    style={{
-                      background:
-                        "linear-gradient(135deg,#1e293b 0%,#0f172a 100%)",
-                      border: `1px solid ${brand.color}44`,
-                      borderTop: `3px solid ${brand.color}`,
-                      borderRadius: 12,
-                      padding: 28,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      gap: 24,
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div
-                        style={{
-                          fontFamily: "monospace",
-                          fontSize: 10,
-                          color: brand.color,
-                          letterSpacing: "0.2em",
-                          marginBottom: 10,
-                        }}
-                      >
-                        {r["Campaign Code"]} · {r["Mediumtype"]}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 32,
-                          fontWeight: 900,
-                          marginBottom: 12,
-                          letterSpacing: "-0.02em",
-                        }}
-                      >
-                        {r["Merk"]}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          flexWrap: "wrap",
-                          fontFamily: "monospace",
-                          fontSize: 11,
-                        }}
-                      >
-                        {(
-                          [
-                            [r["Objective"], "#3b82f6"],
-                            [r["Valence"], "#8b5cf6"],
-                            [r["Doelgroep"], "#10b981"],
-                            [r["Imago"], "#f59e0b"],
-                          ] as [string, string][]
-                        )
-                          .filter(([val]) => Boolean(val))
-                          .map(([val, c]) => (
-                            <span
-                              key={val}
-                              style={{
-                                background: `${c}22`,
-                                color: c,
-                                padding: "4px 12px",
-                                borderRadius: 6,
-                                border: `1px solid ${c}44`,
-                              }}
-                            >
-                              {val}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div
-                        style={{
-                          fontFamily: "monospace",
+                      <PolarGrid stroke="#1e293b" />
+                      <PolarAngleAxis
+                        dataKey="subject"
+                        tick={{
                           fontSize: 9,
-                          color: "#475569",
-                          marginBottom: 4,
-                          letterSpacing: "0.2em",
+                          fill: "#64748b",
+                          fontFamily: "'JetBrains Mono', monospace",
                         }}
-                      >
-                        SPEND
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 40,
-                          fontWeight: 900,
-                          color: "#f59e0b",
-                          lineHeight: 1,
-                          letterSpacing: "-0.03em",
+                      />
+                      <PolarRadiusAxis
+                        angle={90}
+                        domain={[0, 100]}
+                        tick={{ fontSize: 8, fill: "#334155" }}
+                        axisLine={false}
+                      />
+                      <Radar
+                        dataKey="pct"
+                        stroke={brand.color}
+                        fill={brand.color}
+                        fillOpacity={0.2}
+                        dot={{ fill: brand.color, r: 4 }}
+                      />
+                      <Tooltip content={<Tip />} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </Card>
+                <Card>
+                  <SectionLabel>CEP Frequency (# of creatives)</SectionLabel>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart
+                      data={brand.ceps}
+                      layout="vertical"
+                      margin={{ left: 100, right: 20 }}
+                    >
+                      <XAxis
+                        type="number"
+                        domain={[0, brand.creatives.length]}
+                        tick={{
+                          fontSize: 10,
+                          fill: "#475569",
+                          fontFamily: "'JetBrains Mono', monospace",
                         }}
-                      >
-                        {fmt(NUM(r["Spend"] ?? "0"))}
-                      </div>
-                      {r["Creatives"]?.startsWith("http") && (
-                        <a
-                          href={r["Creatives"]}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            display: "inline-block",
-                            marginTop: 12,
-                            fontFamily: "monospace",
-                            fontSize: 10,
-                            color: "#60a5fa",
-                            background: "#1e3a5f",
-                            border: "1px solid #3b82f644",
-                            borderRadius: 6,
-                            padding: "6px 14px",
-                            textDecoration: "none",
-                          }}
-                        >
-                          ↗ View Creative
-                        </a>
-                      )}
-                    </div>
-                  </div>
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="label"
+                        width={95}
+                        tick={{
+                          fontSize: 9,
+                          fill: "#94a3b8",
+                          fontFamily: "'JetBrains Mono', monospace",
+                        }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip content={<Tip />} />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                        {brand.ceps.map((_, i) => (
+                          <Cell key={i} fill={CEP_COLORS[i]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+              </div>
 
-                  {/* Prev / Next */}
-                  <div
-                    style={{ display: "flex", gap: 10, alignItems: "center" }}
+              {/* Multi-brand radar overlay */}
+              <Card>
+                <SectionLabel>
+                  CEP Radar — Multi-Brand Overlay (top 5 by spend)
+                </SectionLabel>
+                <ResponsiveContainer width="100%" height={380}>
+                  <RadarChart
+                    data={CEP_LABELS.map((label, i) => {
+                      const entry = {
+                        subject:
+                          label.length > 10
+                            ? label.substring(0, 10) + "…"
+                            : label,
+                      };
+                      [...brands]
+                        .sort((a, b) => b.totalSpend - a.totalSpend)
+                        .slice(0, 5)
+                        .forEach((b) => {
+                          entry[b.name] = b.ceps[i].pct;
+                        });
+                      return entry;
+                    })}
                   >
-                    <button
-                      type="button"
-                      disabled={selCreative === 0}
-                      onClick={() => setSelCreative((v) => Math.max(0, v - 1))}
-                      style={{
-                        padding: "8px 18px",
-                        background: "#1e293b",
-                        border: "1px solid #334155",
-                        borderRadius: 6,
-                        color: selCreative === 0 ? "#334155" : "#94a3b8",
-                        cursor: selCreative === 0 ? "not-allowed" : "pointer",
-                        fontFamily: "monospace",
-                        fontSize: 11,
+                    <PolarGrid stroke="#1e293b" />
+                    <PolarAngleAxis
+                      dataKey="subject"
+                      tick={{
+                        fontSize: 9,
+                        fill: "#64748b",
+                        fontFamily: "'JetBrains Mono', monospace",
                       }}
-                    >
-                      ← Prev
-                    </button>
-                    <button
-                      type="button"
-                      disabled={selCreative === brand.creatives.length - 1}
-                      onClick={() =>
-                        setSelCreative((v) =>
-                          Math.min(brand.creatives.length - 1, v + 1),
-                        )
-                      }
-                      style={{
-                        padding: "8px 18px",
-                        background: "#1e293b",
-                        border: "1px solid #334155",
-                        borderRadius: 6,
-                        color:
-                          selCreative === brand.creatives.length - 1
-                            ? "#334155"
-                            : "#94a3b8",
-                        cursor:
-                          selCreative === brand.creatives.length - 1
-                            ? "not-allowed"
-                            : "pointer",
-                        fontFamily: "monospace",
-                        fontSize: 11,
-                      }}
-                    >
-                      Next →
-                    </button>
-                    <span
-                      style={{
-                        fontFamily: "monospace",
-                        fontSize: 11,
-                        color: "#475569",
-                      }}
-                    >
-                      Creative {selCreative + 1} / {brand.creatives.length}
-                    </span>
-                  </div>
-
-                  {/* Attributes */}
-                  <Card>
-                    <SectionLabel>Attributes</SectionLabel>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(4,1fr)",
-                        gap: 10,
-                      }}
-                    >
-                      {(
-                        [
-                          ["Music Type", "Music Type"],
-                          ["Voice-over", "Voice-over"],
-                          ["Logo Start", "Logo Start"],
-                          ["Logo End", "Logo End"],
-                          ["Logo Locatie", "Logo Locatie"],
-                          ["Logo Visible", "Logo Visible"],
-                          ["Kijkrichting", "Kijkrichting"],
-                          ["MVO", "MVO"],
-                          ["DBA Kleur", "DBA - Kleur van logo"],
-                          ["DBA Style", "DBA - Style Keuze"],
-                          ["Dier", "Dier"],
-                          ["Personen", "Personen"],
-                        ] as [string, string][]
-                      ).map(([label, key]) => {
-                        const v = r[key] ?? "";
-                        return (
-                          <div
-                            key={label}
-                            style={{
-                              background: "#0f172a",
-                              borderRadius: 6,
-                              padding: "10px 14px",
-                              border: "1px solid #1e293b",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontFamily: "monospace",
-                                fontSize: 8,
-                                color: "#334155",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.18em",
-                                marginBottom: 5,
-                              }}
-                            >
-                              {label}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color:
-                                  v &&
-                                  v !== "False" &&
-                                  v !== "FALSE" &&
-                                  v !== "Afwezig"
-                                    ? "#e2e8f0"
-                                    : "#334155",
-                              }}
-                            >
-                              {v || "—"}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Card>
-
-                  {/* Signals */}
-                  <Card>
-                    <SectionLabel>Creative Signals</SectionLabel>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {(
-                        [
-                          ["Bekende Personen", "#ef4444"],
-                          ["Humor", "#f59e0b"],
-                          ["DBA - Slogan", "#10b981"],
-                          ["DBA - Karakter", "#8b5cf6"],
-                          ["DBA - Style Keuze", "#06b6d4"],
-                          ["DBA - Soundlogo", "#f97316"],
-                          ["Mystery Ad", "#ec4899"],
-                          ["Dier", "#84cc16"],
-                          ["Personen", "#14b8a6"],
-                        ] as [string, string][]
-                      ).map(([key, color]) => {
-                        const on = BOOL(r[key] ?? "");
-                        return (
-                          <div
-                            key={key}
-                            style={{
-                              padding: "7px 14px",
-                              borderRadius: 6,
-                              fontSize: 11,
-                              fontFamily: "monospace",
-                              background: on ? `${color}18` : "#0f172a",
-                              border: `1px solid ${on ? color + "55" : "#1e293b"}`,
-                              color: on ? color : "#334155",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 7,
-                            }}
-                          >
-                            <span
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: "50%",
-                                flexShrink: 0,
-                                background: on ? color : "#1e293b",
-                                boxShadow: on ? `0 0 6px ${color}` : "none",
-                              }}
-                            />
-                            {key.replace("DBA - ", "")}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Card>
-
-                  {/* CEPs */}
-                  <Card>
-                    <SectionLabel>Category Entry Points</SectionLabel>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(4,1fr)",
-                        gap: 8,
-                      }}
-                    >
-                      {CEP_LABELS.map((label, i) => (
-                        <CepTag
-                          key={i}
-                          label={label}
-                          active={BOOL(r[cepKey(i)] ?? "")}
-                          color={CEP_COLORS[i]}
-                          idx={i}
+                    />
+                    <PolarRadiusAxis
+                      angle={90}
+                      domain={[0, 100]}
+                      tick={{ fontSize: 8, fill: "#334155" }}
+                      axisLine={false}
+                    />
+                    {[...brands]
+                      .sort((a, b) => b.totalSpend - a.totalSpend)
+                      .slice(0, 5)
+                      .map((b) => (
+                        <Radar
+                          key={b.name}
+                          name={b.name}
+                          dataKey={b.name}
+                          stroke={b.color}
+                          fill={b.color}
+                          fillOpacity={b.name === brandName ? 0.15 : 0.03}
+                          strokeWidth={b.name === brandName ? 2.5 : 1}
+                          dot={
+                            b.name === brandName
+                              ? { fill: b.color, r: 3 }
+                              : false
+                          }
                         />
                       ))}
-                    </div>
-                  </Card>
+                    <Tooltip content={<Tip />} />
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: 10,
+                        color: "#64748b",
+                      }}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </Card>
 
-                  {r["CoT resultaten, exclusief ceps"] && (
-                    <Card>
-                      <SectionLabel>Analysis Reasoning</SectionLabel>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          lineHeight: 1.9,
-                          color: "#64748b",
-                        }}
-                      >
-                        {r["CoT resultaten, exclusief ceps"]}
-                      </div>
-                    </Card>
-                  )}
-                  {r["CoT ceps keuze met verantwoording"] && (
-                    <Card>
-                      <SectionLabel>CEP Reasoning</SectionLabel>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          lineHeight: 1.9,
-                          color: "#64748b",
-                        }}
-                      >
-                        {r["CoT ceps keuze met verantwoording"]}
-                      </div>
-                    </Card>
-                  )}
+              <Card>
+                <SectionLabel>CEP Presence — {brand.name}</SectionLabel>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4,1fr)",
+                    gap: 10,
+                  }}
+                >
+                  {brand.ceps.map((c, i) => (
+                    <CepTag
+                      key={i}
+                      label={c.label}
+                      active={c.count > 0}
+                      color={CEP_COLORS[i]}
+                      idx={i}
+                    />
+                  ))}
                 </div>
-              );
-            })()}
+              </Card>
+
+              {/* CEP Spend per Brand - Stacked */}
+              <Card>
+                <SectionLabel>CEP Spend Allocation by Brand (€)</SectionLabel>
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart
+                    data={crossBrandCepSpend}
+                    margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
+                  >
+                    <XAxis
+                      dataKey="name"
+                      tick={{
+                        fontSize: 8,
+                        fill: "#64748b",
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      angle={-40}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 9, fill: "#475569" }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) => fmt(v)}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        const items = payload
+                          .filter((p) => p.value > 0)
+                          .sort((a, b) => b.value - a.value);
+                        return (
+                          <div
+                            style={{
+                              background: "#1e293b",
+                              border: "1px solid #475569",
+                              borderRadius: 6,
+                              padding: "10px 14px",
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: 11,
+                              color: "#e2e8f0",
+                              maxHeight: 300,
+                              overflowY: "auto",
+                            }}
+                          >
+                            <div
+                              style={{
+                                color: "#64748b",
+                                marginBottom: 6,
+                                fontSize: 10,
+                              }}
+                            >
+                              {payload[0]?.payload?.fullName || label}
+                            </div>
+                            {items.map((p, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  color: p.fill,
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  gap: 16,
+                                }}
+                              >
+                                <span>{p.name}</span>
+                                <span style={{ fontWeight: 700 }}>
+                                  {fmt(p.value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }}
+                    />
+                    {[...brands]
+                      .sort((a, b) => b.totalSpend - a.totalSpend)
+                      .slice(0, 8)
+                      .map((b) => (
+                        <Bar
+                          key={b.name}
+                          dataKey={b.name}
+                          stackId="a"
+                          fill={b.color}
+                          fillOpacity={b.name === brandName ? 1 : 0.4}
+                        />
+                      ))}
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: 9,
+                        color: "#64748b",
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            </div>
+          )}
         </div>
       )}
     </div>
