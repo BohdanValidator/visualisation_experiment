@@ -653,7 +653,7 @@ export function CompetitiveTab({ brands }: Props) {
                         <Kpi
                           value={`${avgCoverage.toFixed(0)}%`}
                           label="avg coverage"
-                          color="#60a5fa"
+                          color="#F0908D"
                         />
                         <Kpi
                           value={`${dominancePct}%`}

@@ -61,7 +61,7 @@ export function OverviewTab({
               .sort((a, b) => b.totalSpend - a.totalSpend)
               .findIndex((b) => b.name === brand.name) + 1
           }`}
-          color="#8b5cf6"
+          color="#E56661"
           sub={`of ${brands.length} brands`}
         />
       </div>

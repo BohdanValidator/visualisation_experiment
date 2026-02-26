@@ -199,7 +199,7 @@ export function CepTab({
             <tbody>
               {brands.map((b, ri) => {
                 const isActive = b.name === brandName;
-                const bg = isActive ? "#162032" : "transparent";
+                const bg = isActive ? "#2d1517" : "transparent";
                 return (
                   <tr
                     key={ri}

@@ -15,13 +15,13 @@ const MODES: { id: Mode; label: string; sub: string; color: string }[] = [
     id: "competitive",
     label: "Competitive Analysis",
     sub: "Multi-brand · CEP Comparison · Executive Summary",
-    color: "#8b5cf6",
+    color: "#E56661",
   },
   {
     id: "deepdive",
     label: "Brand Deep Dive",
     sub: "Single-brand · Overview · CEP Analysis",
-    color: "#3b82f6",
+    color: "#C94B46",
   },
 ];
 
@@ -45,7 +45,7 @@ const CSS = `
   .mode-btn { transition:background .15s ease, border-color .15s ease; }
   .mode-btn:hover { filter:brightness(1.08); }
   .trow { cursor:pointer; }
-  .trow:hover td { background:#1e3a5f !important; }
+  .trow:hover td { background:#2d1517 !important; }
   @keyframes fin { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
   .fin { animation:fin .22s ease both; }
 `;
@@ -179,8 +179,8 @@ export default function App() {
                 width: 10,
                 height: 10,
                 borderRadius: "50%",
-                background: "#3b82f6",
-                boxShadow: "0 0 14px #3b82f6",
+                background: "#E56661",
+                boxShadow: "0 0 14px #E56661",
               }}
             />
             <span
@@ -334,10 +334,10 @@ export default function App() {
                 className="tab-btn"
                 onClick={() => setTab(t.id)}
                 style={{
-                  color: tab === t.id ? "#60a5fa" : "#475569",
+                  color: tab === t.id ? "#F0908D" : "#475569",
                   borderBottom:
                     tab === t.id
-                      ? "2px solid #3b82f6"
+                      ? "2px solid #E56661"
                       : "2px solid transparent",
                 }}
               >

@@ -13,18 +13,18 @@ export const CEP_LABELS = [
 ];
 
 export const PALETTE = [
-  "#3b82f6",
+  "#E56661",
   "#f59e0b",
   "#10b981",
-  "#ef4444",
-  "#8b5cf6",
   "#06b6d4",
+  "#C94B46",
+  "#a855f7",
   "#f97316",
   "#84cc16",
   "#ec4899",
   "#14b8a6",
-  "#a855f7",
   "#0ea5e9",
+  "#F0908D",
   "#facc15",
   "#f43f5e",
 ];
