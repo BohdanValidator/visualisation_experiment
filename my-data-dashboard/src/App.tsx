@@ -47,9 +47,18 @@ const PALETTE = [
   "#f43f5e",
 ];
 
-const DEEPDIVE_TABS: { id: DeepDiveTab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "cep", label: "CEP Analysis" },
+const CEP_COLORS = [
+  "#60a5fa",
+  "#fbbf24",
+  "#34d399",
+  "#f87171",
+  "#a78bfa",
+  "#22d3ee",
+  "#fb923c",
+  "#a3e635",
+  "#f472b6",
+  "#2dd4bf",
+  "#c084fc",
 ];
 
 const MEDIUM_COLORS = {
@@ -62,21 +71,23 @@ const MEDIUM_COLORS = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const BOOL = (v) => v === "True" || v === "TRUE";
-const NUM = (v) => parseFloat(String(v).replace(/[^\d.]/g, "")) || 0;
-const fmt = (n) =>
+const BOOL = (v: string): boolean => v === "True" || v === "TRUE";
+const NUM = (v: string): number =>
+  parseFloat(String(v).replace(/[^\d.]/g, "")) || 0;
+const fmt = (n: number): string =>
   n >= 1e6
     ? `€${(n / 1e6).toFixed(1)}M`
     : n >= 1e3
       ? `€${(n / 1e3).toFixed(0)}K`
       : `€${Math.round(n)}`;
-const pct = (a, b) => (b === 0 ? 0 : Math.round((a / b) * 100));
-const cepKey = (i) => `CEP_${String(i + 1).padStart(2, "0")}`;
+const pct = (a: number, b: number): number =>
+  b === 0 ? 0 : Math.round((a / b) * 100);
+const cepKey = (i: number): string => `CEP_${String(i + 1).padStart(2, "0")}`;
 
-const buildBrands = (rows) => {
-  const map = {};
-  rows.forEach((r) => {
-    const m = r["Merk"] || "Unknown";
+const buildBrands = (rows: any[]): any[] => {
+  const map: Record<string, any[]> = {};
+  rows.forEach((r: any) => {
+    const m: string = r["Merk"] || "Unknown";
     if (!map[m]) map[m] = [];
     map[m].push(r);
   });
@@ -85,50 +96,52 @@ const buildBrands = (rows) => {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, creatives], idx) => {
       const totalSpend = creatives.reduce(
-        (s, r) => s + NUM(r["Spend"] ?? "0"),
+        (s: number, r: any) => s + NUM(r["Spend"] ?? "0"),
         0,
       );
 
       const ceps = CEP_LABELS.map((label, i) => {
-        const count = creatives.filter((r) => BOOL(r[cepKey(i)] ?? "")).length;
+        const count = creatives.filter((r: any) =>
+          BOOL(r[cepKey(i)] ?? ""),
+        ).length;
         const spend = creatives
-          .filter((r) => BOOL(r[cepKey(i)] ?? ""))
-          .reduce((s, r) => s + NUM(r["Spend"] ?? "0"), 0);
+          .filter((r: any) => BOOL(r[cepKey(i)] ?? ""))
+          .reduce((s: number, r: any) => s + NUM(r["Spend"] ?? "0"), 0);
         return { label, count, pct: pct(count, creatives.length), spend };
       });
 
-      const objectives = {};
-      creatives.forEach((r) => {
-        const o = r["Objective"] ?? "?";
+      const objectives: Record<string, number> = {};
+      creatives.forEach((r: any) => {
+        const o: string = r["Objective"] ?? "?";
         objectives[o] = (objectives[o] ?? 0) + 1;
       });
 
-      const valences = {};
-      creatives.forEach((r) => {
-        const v = r["Valence"] ?? "?";
+      const valences: Record<string, number> = {};
+      creatives.forEach((r: any) => {
+        const v: string = r["Valence"] ?? "?";
         valences[v] = (valences[v] ?? 0) + 1;
       });
 
-      const mediumSpend = {};
-      creatives.forEach((r) => {
-        const m = r["Mediumtype"] ?? "?";
+      const mediumSpend: Record<string, number> = {};
+      creatives.forEach((r: any) => {
+        const m: string = r["Mediumtype"] ?? "?";
         mediumSpend[m] = (mediumSpend[m] ?? 0) + NUM(r["Spend"] ?? "0");
       });
 
-      const imago = {};
-      creatives.forEach((r) => {
-        const im = r["Imago"] ?? "?";
+      const imago: Record<string, number> = {};
+      creatives.forEach((r: any) => {
+        const im: string = r["Imago"] ?? "?";
         imago[im] = (imago[im] ?? 0) + 1;
       });
 
-      const fl = (key) =>
+      const fl = (key: string) =>
         pct(
-          creatives.filter((r) => BOOL(r[key] ?? "")).length,
+          creatives.filter((r: any) => BOOL(r[key] ?? "")).length,
           creatives.length,
         );
-      const fv = (key) =>
+      const fv = (key: string) =>
         pct(
-          creatives.filter((r) => r[key] && r[key] !== "Afwezig").length,
+          creatives.filter((r: any) => r[key] && r[key] !== "Afwezig").length,
           creatives.length,
         );
 
@@ -167,7 +180,15 @@ const buildBrands = (rows) => {
 };
 
 // ─── Micro UI ─────────────────────────────────────────────────────────────────
-const Tip = ({ active, payload, label }) => {
+const Tip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: any[];
+  label?: any;
+}) => {
   if (!active || !payload?.length) return null;
   return (
     <div
@@ -206,7 +227,7 @@ const Tip = ({ active, payload, label }) => {
   );
 };
 
-const Card = ({ children, style }) => (
+const Card = ({ children, style }: { children: any; style?: any }) => (
   <div
     style={{
       background: "#1e293b",
@@ -220,7 +241,7 @@ const Card = ({ children, style }) => (
   </div>
 );
 
-const SectionLabel = ({ children }) => (
+const SectionLabel = ({ children }: { children: any }) => (
   <div
     style={{
       fontFamily: "'JetBrains Mono', monospace",
@@ -248,7 +269,17 @@ const SectionLabel = ({ children }) => (
   </div>
 );
 
-const KpiCard = ({ label, value, color, sub }) => (
+const KpiCard = ({
+  label,
+  value,
+  color,
+  sub,
+}: {
+  label: any;
+  value: any;
+  color: any;
+  sub?: any;
+}) => (
   <div
     style={{
       background: "#0f172a",
@@ -296,7 +327,7 @@ const KpiCard = ({ label, value, color, sub }) => (
   </div>
 );
 
-const FBar = ({ name, val, color }) => (
+const FBar = ({ name, val, color }: { name: any; val: any; color: any }) => (
   <div
     style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}
   >
@@ -345,7 +376,17 @@ const FBar = ({ name, val, color }) => (
   </div>
 );
 
-const CepTag = ({ label, active, color, idx }) => (
+const CepTag = ({
+  label,
+  active,
+  color,
+  idx,
+}: {
+  label: any;
+  active: any;
+  color: any;
+  idx: any;
+}) => (
   <div
     style={{
       display: "flex",
@@ -386,11 +427,12 @@ const CepTag = ({ label, active, color, idx }) => (
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [brandName, setBrandName] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [brandName, setBrandName] = useState<string | null>(null);
   const [tab, setTab] = useState("overview");
+  const mode = "deepdive";
 
   useEffect(() => {
     fetch("/data.json")
@@ -414,7 +456,7 @@ export default function App() {
     if (brands.length > 0 && brandName === null) setBrandName(brands[0].name);
   }, [brands, brandName]);
 
-  const handleBrandClick = (name) => {
+  const handleBrandClick = (name: string) => {
     setBrandName(name);
     setTab("overview");
   };
@@ -429,33 +471,12 @@ export default function App() {
   // Cross-brand comparison data
   const crossBrandCepSpend = useMemo(() => {
     return CEP_LABELS.map((label, i) => {
-      const entry = {
+      const entry: Record<string, any> = {
         name: label.length > 12 ? label.substring(0, 12) + "…" : label,
         fullName: label,
       };
       brands.forEach((b) => {
         entry[b.name] = b.ceps[i].spend;
-      });
-      return entry;
-    });
-  }, [brands]);
-
-  const crossBrandFeatures = useMemo(() => {
-    const featureNames = [
-      "Humor",
-      "Bekende Persoon",
-      "Voice-over",
-      "Soundlogo",
-      "Muziek",
-      "DBA Slogan",
-      "Karakter",
-      "Mystery Ad",
-    ];
-    return featureNames.map((fname) => {
-      const entry = { name: fname };
-      brands.forEach((b) => {
-        const f = b.features.find((ft) => ft.name === fname);
-        entry[b.name] = f ? f.val : 0;
       });
       return entry;
     });
@@ -486,7 +507,7 @@ export default function App() {
       .filter((b) => b.totalSpend > 100000)
       .sort((a, b) => b.totalSpend - a.totalSpend)
       .map((b) => {
-        const entry = { name: b.name, color: b.color };
+        const entry: Record<string, any> = { name: b.name, color: b.color };
         mediums.forEach((m) => {
           entry[m] = b.mediumSpend[m] || 0;
         });
@@ -670,7 +691,7 @@ export default function App() {
                     fontFamily: "monospace",
                     fontSize: 11,
                     fontWeight: 700,
-                    color: active ? m.color : "#475569",
+                    color: active ? b.color : "#475569",
                     letterSpacing: "0.12em",
                     textTransform: "uppercase",
                   }}
@@ -692,6 +713,7 @@ export default function App() {
             })}
           </div>
         </div>
+      </div>
 
       {/* ══ TAB BAR ══ */}
       <div
@@ -851,7 +873,7 @@ export default function App() {
                   <SectionLabel>
                     Creative Feature Usage — {brand.name}
                   </SectionLabel>
-                  {brand.features.map((f) => (
+                  {brand.features.map((f: any) => (
                     <FBar key={f.name} {...f} />
                   ))}
                 </Card>
@@ -861,7 +883,9 @@ export default function App() {
                   <Card>
                     <SectionLabel>Objective Split</SectionLabel>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {Object.entries(brand.objectives)
+                      {Object.entries(
+                        brand.objectives as Record<string, number>,
+                      )
                         .sort((a, b) => b[1] - a[1])
                         .map(([k, v], i) => (
                           <div
@@ -901,7 +925,7 @@ export default function App() {
                   <Card>
                     <SectionLabel>Valence Split</SectionLabel>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {Object.entries(brand.valences)
+                      {Object.entries(brand.valences as Record<string, number>)
                         .sort((a, b) => b[1] - a[1])
                         .map(([k, v], i) => (
                           <div
@@ -941,10 +965,10 @@ export default function App() {
                   <Card>
                     <SectionLabel>Brand Image (Imago)</SectionLabel>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {Object.entries(brand.imago)
+                      {Object.entries(brand.imago as Record<string, number>)
                         .sort((a, b) => b[1] - a[1])
                         .map(([k, v], i) => {
-                          const total = brand.creatives.length;
+                          const total = (brand.creatives as any[]).length;
                           const p = pct(v, total);
                           const colors = [
                             "#3b82f6",
@@ -1278,7 +1302,7 @@ export default function App() {
                           const isActive = b.name === brandName;
                           const maxCepSpend = Math.max(
                             ...brands.flatMap((br) =>
-                              br.ceps.map((c) => c.spend),
+                              br.ceps.map((c: any) => c.spend),
                             ),
                             1,
                           );
@@ -1301,7 +1325,7 @@ export default function App() {
                               >
                                 {b.name}
                               </td>
-                              {b.ceps.map((c, ci) => {
+                              {b.ceps.map((c: any, ci: number) => {
                                 const intensity = c.spend / maxCepSpend;
                                 const alpha = Math.max(
                                   0.05,
@@ -1462,7 +1486,7 @@ export default function App() {
                               >
                                 {b.name}
                               </td>
-                              {b.features.map((f, fi) => {
+                              {b.features.map((f: any, fi: number) => {
                                 const alpha = Math.max(
                                   0.05,
                                   (f.val / 100) * 0.85,
@@ -1805,7 +1829,7 @@ export default function App() {
                               >
                                 {b.name}
                               </td>
-                              {b.ceps.map((c, ci) => (
+                              {b.ceps.map((c: any, ci: number) => (
                                 <td
                                   key={ci}
                                   style={{
@@ -1902,7 +1926,7 @@ export default function App() {
                   <SectionLabel>CEP Radar — {brand.name}</SectionLabel>
                   <ResponsiveContainer width="100%" height={300}>
                     <RadarChart
-                      data={brand.ceps.map((c) => ({
+                      data={brand.ceps.map((c: any) => ({
                         subject:
                           c.label.length > 10
                             ? c.label.substring(0, 10) + "…"
@@ -1969,7 +1993,7 @@ export default function App() {
                       />
                       <Tooltip content={<Tip />} />
                       <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                        {brand.ceps.map((_, i) => (
+                        {brand.ceps.map((_: any, i: number) => (
                           <Cell key={i} fill={CEP_COLORS[i]} />
                         ))}
                       </Bar>
@@ -1986,7 +2010,7 @@ export default function App() {
                 <ResponsiveContainer width="100%" height={380}>
                   <RadarChart
                     data={CEP_LABELS.map((label, i) => {
-                      const entry = {
+                      const entry: Record<string, any> = {
                         subject:
                           label.length > 10
                             ? label.substring(0, 10) + "…"
@@ -2058,7 +2082,7 @@ export default function App() {
                     gap: 10,
                   }}
                 >
-                  {brand.ceps.map((c, i) => (
+                  {brand.ceps.map((c: any, i: number) => (
                     <CepTag
                       key={i}
                       label={c.label}

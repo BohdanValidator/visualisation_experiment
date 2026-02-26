@@ -330,7 +330,7 @@ export function CompetitiveTab({ brands }: Props) {
                 />
                 <Tooltip
                   content={<Tip />}
-                  formatter={(v: unknown, name: string) =>
+                  formatter={(v: unknown, name: string | undefined) =>
                     name === "Avg %"
                       ? [`${v}%`, "Avg Coverage"]
                       : [fmt(v as number), "Est. Spend (all brands)"]
